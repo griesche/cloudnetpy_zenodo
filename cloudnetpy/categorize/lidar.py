@@ -18,7 +18,8 @@ class Lidar(DataSource):
 
     def __init__(self, full_path: str):
         super().__init__(full_path)
-        self.append_data(self.getvar("beta"), "beta")
+        self.append_data(self.getvar("beta_532_nr"), "beta")  # below 3 km: use 532 near range data
+        self.append_data(self.getvar("depolarisation_532"), "lidar_depolarisation")
         self._add_meta()
 
     def interpolate_to_grid(self, time_new: np.ndarray, height_new: np.ndarray) -> list:
@@ -28,6 +29,7 @@ class Lidar(DataSource):
 
         # Remove completely masked profiles from the interpolation
         beta = self.data["beta"][:]
+        delta = self.data["lidar_depolarisation"][:]
         indices = []
         for ind, b in enumerate(beta):
             if not ma.all(b) is ma.masked:
@@ -35,6 +37,9 @@ class Lidar(DataSource):
         assert self.height is not None
         beta_interpolated = interpolate_2d_nearest(
             self.time[indices], self.height, beta[indices, :], time_new, height_new
+        )
+        delta_interpolated = interpolate_2d_nearest(
+            self.time[indices], self.height, delta[indices, :], time_new, height_new
         )
 
         # Filter profiles and range gates having data gap
@@ -44,10 +49,13 @@ class Lidar(DataSource):
         if bad_time_indices:
             logging.warning(f"Unable to interpolate lidar for {len(bad_time_indices)} time steps")
         beta_interpolated[bad_time_indices, :] = ma.masked
+        delta_interpolated[bad_time_indices, :] = ma.masked
         if bad_height_indices:
             logging.warning(f"Unable to interpolate lidar for {len(bad_height_indices)} altitudes")
         beta_interpolated[:, bad_height_indices] = ma.masked
+        delta_interpolated[:, bad_height_indices] = ma.masked
         self.data["beta"].data = beta_interpolated
+        self.data["lidar_depolarisation"].data = delta_interpolated
         return bad_time_indices
 
     def _add_meta(self) -> None:
