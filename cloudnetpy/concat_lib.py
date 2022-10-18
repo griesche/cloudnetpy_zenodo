@@ -118,6 +118,10 @@ class Concat:
 
             self.first_file[key].set_auto_scale(False)
             array = self.first_file[key][:]
+            if 'scale_factor' in self.first_file[key].ncattrs():
+                array = array * self.first_file[key].scale_factor + self.first_file[key].add_offset
+            if key == 'time':
+                array = array + self.first_file["base_time"][:]
             dimensions = self.first_file[key].dimensions
             fill_value = getattr(self.first_file[key], "_FillValue", None)
             var = self.concatenated_file.createVariable(
@@ -130,6 +134,8 @@ class Concat:
                 fill_value=fill_value,
             )
             var.set_auto_scale(False)
+            if key == 'sweep_mode': # sweep mode in kazr file has scond dimension ('string_length_22')
+                array = 'vertical pointing'
             var[:] = array
             _copy_attributes(self.first_file[key], var)
 
@@ -147,6 +153,10 @@ class Concat:
                             f"files '{self.first_filename}' and '{filename}'"
                         )
                     continue
+                if 'scale_factor' in file[key].ncattrs():
+                    array = array * file[key].scale_factor + file[key].add_offset
+                if key == 'time':
+                    array = array + file["base_time"][:]
                 if array.ndim == 0:
                     continue
                 if array.ndim == 1:
@@ -165,6 +175,8 @@ class Concat:
 
 def _copy_attributes(source: netCDF4.Dataset, target: netCDF4.Dataset) -> None:
     for attr in source.ncattrs():
+        if attr == 'scale_factor' or attr == 'add_offset':
+            continue
         if attr != "_FillValue":
             value = getattr(source, attr)
             setattr(target, attr, value)
