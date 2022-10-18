@@ -34,6 +34,7 @@ class ClassData:
         v_sigma (ndarray): 2D standard deviation of the velocity.
         tw (ndarray): 2D wet bulb temperature.
         beta (ndarray): 2D lidar backscatter.
+        lidar_depolarisation (ndarray): 2D lidar volume depolarization.
         lwp (ndarray): 1D liquid water path.
         time (ndarray): 1D fraction hour.
         height (ndarray): 1D height vector (m).
@@ -62,9 +63,13 @@ class ClassData:
         self.tw = data["model"].data["Tw"][:]
         self.model_type = data["model"].type
         self.beta = data["lidar"].data["beta"][:]
+        self.lidar_depolarisation = data["lidar"].data["lidar_depolarisation"][:]
         self.lwp = data["mwr"].data["lwp"][:]
         self.is_rain = _find_rain_from_radar_echo(self.z, self.time)
-        self.rain_rate = _find_rain_rate(self.is_rain, data["radar"])
+        if "disdrometer" in data:
+            self.rain_rate = data['disdrometer'].data['rain_rate']
+        else:
+            self.rain_rate = _find_rain_rate(self.is_rain, data["radar"])
         self.is_clutter = _find_clutter(self.v, self.is_rain)
         self.altitude = data["radar"].altitude
 
@@ -98,7 +103,6 @@ def _find_rain_from_radar_echo(z: np.ndarray, time: np.ndarray, time_buffer: int
         is_rain[ind1 : ind2 + 1] = True
     return is_rain
 
-
 def _find_rain_rate(is_rain: np.ndarray, radar) -> np.ndarray:
     rain_rate = ma.zeros(len(is_rain))
     rain_rate[is_rain] = ma.masked
@@ -109,7 +113,6 @@ def _find_rain_rate(is_rain: np.ndarray, radar) -> np.ndarray:
     else:
         logging.info("No measured rain rate available")
     return rain_rate
-
 
 def _find_clutter(
     v: np.ma.MaskedArray, is_rain: np.ndarray, n_gates: int = 10, v_lim: float = 0.05
