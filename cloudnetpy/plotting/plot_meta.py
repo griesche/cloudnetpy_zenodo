@@ -28,6 +28,7 @@ _KGM3 = "kg m$^{-3}$"
 _KGM2S1 = "kg m$^{-2}$ s$^{-1}$"
 _DB = "dB"
 _DBZ = "dBZ"
+_MMH = "mm h$^{-1}$"
 
 _COLORS = {
     "green": "#3cb371",
@@ -409,28 +410,28 @@ ATTRIBUTES = {
         plot_scale=Scale.LOGARITHMIC,
         plot_type="mesh",
     ),
-    "depolarisation_raw": PlotMeta(
+    "lidar_depolarisation_raw": PlotMeta(
         name="Raw depolarisation",
         cbar="viridis",
         clabel="",
-        plot_range=(1e-3, 1),
-        plot_scale=Scale.LOGARITHMIC,
+        plot_range=(0, 0.5),
+        plot_scale=Scale.LINEAR,
         plot_type="mesh",
     ),
-    "depolarisation": PlotMeta(
+    "lidar_depolarisation": PlotMeta(
         name="Lidar depolarisation",
         cbar="viridis",
         clabel="",
-        plot_range=(1e-3, 1),
-        plot_scale=Scale.LOGARITHMIC,
+        plot_range=(0, 0.5),
+        plot_scale=Scale.LINEAR,
         plot_type="mesh",
     ),
-    "depolarisation_smooth": PlotMeta(
+    "lidar_depolarisation_smooth": PlotMeta(
         name="Lidar depolarisation (smoothed)",
         cbar="viridis",
         clabel="",
-        plot_range=(1e-3, 1),
-        plot_scale=Scale.LOGARITHMIC,
+        plot_range=(0, 0.5),
+        plot_scale=Scale.LINEAR,
         plot_type="mesh",
     ),
     "Z": PlotMeta(
@@ -493,7 +494,7 @@ ATTRIBUTES = {
         name="Doppler velocity",
         cbar="RdBu_r",
         clabel=_MS1,
-        plot_range=(-4, 4),
+        plot_range=(-2, 2),
         plot_scale=Scale.LINEAR,
         plot_type="mesh",
     ),
@@ -620,6 +621,15 @@ ATTRIBUTES = {
         source="mwr",
     ),
     "rainfall_rate": PlotMeta(name="Rainfall rate", plot_type="bar", source="disdrometer"),
+    "rain_rate": PlotMeta(
+            name="Rainfall rate", 
+            cbar="Blues",
+            ylabel=_MMH,
+            plot_range=(0, 50),
+            plot_scale=Scale.LINEAR,
+            plot_type="bar", 
+            source="disdrometer",
+    ),
     "n_particles": PlotMeta(name="Number of particles", plot_type="bar", source="disdrometer"),
     "target_classification": PlotMeta(
         name="Target classification", clabel=_CLABEL["target_classification"], plot_type="segment"
