@@ -44,20 +44,36 @@ def _find_falling_from_radar(obs: ClassData, is_insects: np.ndarray) -> np.ndarr
     return is_z & no_clutter & no_insects
 
 
+def _check_lidar_depol(obs: ClassData, is_cold_not_liquid: np.ndarray) -> np.ndarray:
+    is_depol = ~obs.beta.mask
+    is_cold_aerosol = np.zeros(is_depol.shape, dtype=bool)
+    depol_ind = np.where((is_depol & is_cold_not_liquid))
+    ind_no_aerosol = []
+    for ind in range(len(depol_ind[0])):
+        left = max(0,depol_ind[0][ind]-1)
+        right = min(obs.lidar_depolarisation.shape[0],depol_ind[0][ind]+1)
+        bottom = max(0,depol_ind[1][ind]-1)
+        top = min(obs.lidar_depolarisation.shape[1],depol_ind[1][ind]+1)
+        if obs.lidar_depolarisation[left:right,bottom:top].mask.all():
+            continue
+        depol_mean = np.nanmean(obs.lidar_depolarisation[left:right,bottom:top])
+        if depol_mean < 0.1:
+            is_cold_aerosol[depol_ind[0][ind],depol_ind[1][ind]] = True
+    return is_cold_aerosol
+    
+
 def _find_cold_aerosols(obs: ClassData, is_liquid: np.ndarray) -> np.ndarray:
-    """Lidar signals which are in colder than the threshold temperature
-    and threshold altitude from the ground are assumed ice. This method
+    """Lidar signals which are in colder than the threshold temperature are assumed ice.
+    This method should be improved in the future if possible. This method
     should be improved in the future if possible.
     """
     cold_aerosols = np.zeros(is_liquid.shape, dtype=bool)
-    temperature_limit = T0 - 15
-    range_limit = 2000
+    temperature_limit = T0 - 15 # 15 # too high for the arctic....better use also lidar depol for ice identification
     is_beta = ~obs.beta.mask
-    lidar_ice_indices = np.where((obs.tw.data < temperature_limit) & is_beta & ~is_liquid)
-    cold_aerosols[lidar_ice_indices] = True
-    low_range_indices = np.where(obs.height + obs.altitude < range_limit)
-    if low_range_indices:
-        cold_aerosols[:, low_range_indices] = False
+    ind = np.where((obs.tw.data < temperature_limit) & is_beta & ~is_liquid)
+    cold_aerosols[ind] = True
+    ind_cold_aerosol = _check_lidar_depol(obs,cold_aerosols)
+    cold_aerosols[ind_cold_aerosol] = False
     return cold_aerosols
 
 
