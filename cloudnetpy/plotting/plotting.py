@@ -115,8 +115,14 @@ def generate_figure(
         field, ax_value = _screen_high_altitudes(field, ax_value, max_y)
         _set_ax(ax, max_y)
         if plot_type == "bar":
+            if name == 'rain_rate':
+                unit = _get_variable_unit(nc_file, name)
+                source = ATTRIBUTES[name].source
+                time = _read_time_vector(nc_file)
+                _plot_instrument_data(ax, field, name, source, time, unit)
+                continue
             _plot_bar_data(ax, field, ax_value[0])
-            _set_ax(ax, 2, ATTRIBUTES[name].ylabel)
+            _set_ax(ax, 1, ATTRIBUTES[name].ylabel)
 
         elif plot_type == "segment":
             _plot_segment_data(ax, field, name, ax_value)
@@ -413,7 +419,7 @@ def _plot_instrument_data(
 
 
 def _plot_disdrometer(ax, data: ndarray, time: ndarray, name: str, unit: str):
-    if name == "rainfall_rate":
+    if name == "rain_rate":
         if unit == "m s-1":
             data *= 1000 * 3600
         ax.plot(time, data, color="royalblue")

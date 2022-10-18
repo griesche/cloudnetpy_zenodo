@@ -190,6 +190,9 @@ class IceSource(DataSource):
 
 def get_is_rain(filename: str) -> np.ndarray:
     rain_rate = read_nc_fields(filename, "rain_rate")
+    rain_rate_source = read_nc_field_source(filename, "rain_rate")
+    if rain_rate_source == 'OTT Parsivel-2 optical disdrometer of OCEANET': # in case of rain rate from disdrometer, rain rate is masked where no rain was falling and vice versa for rain rate from cloud radar
+        rain_rate = np.ma.masked_greater(rain_rate.filled(0),0)
     is_rain = rain_rate != 0
     assert isinstance(is_rain, ma.MaskedArray)
     is_rain[is_rain.mask] = True
@@ -213,6 +216,22 @@ def read_nc_fields(nc_file: str, names: Union[str, list]) -> Union[ma.MaskedArra
         data = [nc.variables[name][:] for name in names]
     return data[0] if len(data) == 1 else data
 
+def read_nc_field_source(nc_file: str, names: Union[str, list]) -> Union[ma.MaskedArray, list]:
+    """Reads source instruement for selected variables from a netCDF file.
+
+    Args:
+        nc_file: netCDF file name.
+        names: Variables to be read, e.g. 'temperature' or ['ldr', 'lwp'].
+
+    Returns:
+        ndarray/list: Array in case of one variable passed as a string.
+        List of arrays otherwise.
+
+    """
+    names = [names] if isinstance(names, str) else names
+    with netCDF4.Dataset(nc_file) as nc:
+        source = [nc.variables[name].source for name in names]
+    return source[0] if len(source) == 1 else source
 
 def interpolate_model(cat_file: str, names: Union[str, list]) -> Dict[str, np.ndarray]:
     """Interpolates 2D model field into dense Cloudnet grid.
