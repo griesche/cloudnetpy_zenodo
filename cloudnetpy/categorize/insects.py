@@ -43,6 +43,7 @@ def find_insects(
         This insect detection method is novel and needs to be validated.
 
     """
+    prob_lim = 1 # its the arctic after all --> likely no insects
     probabilities = _insect_probability(obs)
     insect_prob = _screen_insects(*probabilities, melting_layer, liquid_layers, obs)
     is_insects = insect_prob > prob_lim
