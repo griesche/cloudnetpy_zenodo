@@ -98,6 +98,11 @@ COMMON_ATTRIBUTES = {
         comment="SNR-screened attenuated backscatter coefficient.\n"
         "Weak background smoothed using Gaussian 2D-kernel.",
     ),
+    "lidar_depolarization": MetaData(
+        long_name="Calibrated volume depolarization (532nm)",
+        units="1",
+        comment="SNR-screened calibrated volume depolarization 532 nm.",
+    ),
     "wavelength": MetaData(
         long_name="Laser wavelength",
         units="nm",

@@ -223,12 +223,33 @@ def add_source_attribute(attributes: dict, data: dict):
             "nyquist_velocity",
             "rain_rate",
         ),
-        "lidar": ("beta", "lidar_wavelength"),
+        "lidar": ("beta", "lidar_depolarization", "lidar_wavelength"),
         "mwr": ("lwp",),
         "model": ("uwind", "vwind", "Tw", "q", "pressure", "temperature"),
     }
+    if "disdrometer" in data:
+        variables = {
+            "radar": (
+                "v",
+                "width",
+                "v_sigma",
+                "ldr",
+                "Z",
+                "zdr",
+                "sldr",
+                "radar_frequency",
+                "nyquist_velocity",
+        ),
+        "lidar": ("beta", "lidar_depolarization", "lidar_wavelength"),
+        "mwr": ("lwp",),
+        "model": ("uwind", "vwind", "Tw", "q", "pressure", "temperature"),
+        "disdrometer": ("rain_rate",)
+        }
     for instrument, keys in variables.items():
-        source = data[instrument].dataset.source
+        try:
+            source = data[instrument].dataset.source
+        except AttributeError:
+            source = data[instrument].dataset.Source
         for key in keys:
             if key in attributes:
                 attributes[key] = attributes[key]._replace(source=source)
