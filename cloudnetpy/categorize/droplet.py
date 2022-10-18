@@ -46,12 +46,12 @@ def _find_ind_above_top(is_freezing_from_peak: np.ndarray, top_above: int) -> in
 
 def find_liquid(
     obs: ClassData,
-    peak_amp: float = 1e-6,
+    peak_amp: float = 1e-5,#1e-6,
     max_width: float = 300,
     min_points: int = 3,
     min_top_der: float = 1e-7,
     min_lwp: float = 0,
-    min_alt: float = 100,
+    min_alt: float = 55, #100,
 ) -> dict:
     """Estimate liquid layers from SNR-screened attenuated backscatter.
 
