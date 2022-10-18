@@ -43,7 +43,11 @@ class Model(DataSource):
         super().__init__(model_file)
         self.type = _find_model_type(model_file)
         self.model_heights = self._get_model_heights(alt_site)
-        self.mean_height = _calc_mean_height(self.model_heights)
+        if len(self.model_heights.shape) > 1: 
+            self.mean_height = _calc_mean_height(self.model_heights)
+        else:
+            self.mean_height = self.model_heights.data
+            self.model_heights = np.ones((len(self.time),len(self.model_heights))) * self.model_heights
         self.height: np.ndarray
         self.data_sparse: dict = {}
         self.data_dense: dict = {}
