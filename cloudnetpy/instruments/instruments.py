@@ -48,6 +48,10 @@ MIRA35 = Instrument(
     manufacturer="METEK", domain="radar", category="cloud radar", model="MIRA-35", frequency=35.5
 )
 
+KAZR = Instrument(
+    manufacturer="ARM", domain="radar", category="cloud radar", model="KAZR", frequency=35.6
+)
+
 COPERNICUS = Instrument(
     manufacturer="RAL Space",
     domain="radar",
