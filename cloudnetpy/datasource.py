@@ -135,7 +135,7 @@ class DataSource:
 
     def _init_time(self) -> np.ndarray:
         time = self.getvar("time")
-        if max(time) > 25:
+        if max(time) > 25 and min(time) > 0:
             logging.warning("Assuming time as seconds, converting to fraction hour")
             time = utils.seconds2hours(time)
         return time
