@@ -29,7 +29,13 @@ class Mwr(DataSource):
             array.rebin_data(self.time, time_grid)
 
     def _init_lwp_data(self) -> None:
-        lwp = self.dataset.variables["lwp"][:]
+        try:
+            lwp = self.dataset.variables["lwp"][:]
+            units = self.dataset.variables["lwp"].units
+        except KeyError:
+            lwp = self.dataset.variables["clwvi"][:]
+            units = self.dataset.variables["clwvi"].units
+        lwp = _kg_to_g(lwp,units)
         self.append_data(lwp, "lwp")
 
     def _init_lwp_error(self) -> None:
@@ -43,3 +49,9 @@ class Mwr(DataSource):
                 f"{round(random_error*100)} % fractional error."
             ),
         )
+
+def _kg_to_g(data: np.ndarray, unit: str) -> np.ndarray:
+    if unit == 'kg m-2':
+        return data * 1000
+    return data
+
