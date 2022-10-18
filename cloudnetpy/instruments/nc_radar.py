@@ -19,7 +19,7 @@ class NcRadar(DataSource):
         site_meta: Some metadata of the site.
 
     Notes:
-        Used with BASTA, MIRA and Copernicus radars.
+        Used with BASTA, MIRA, Copernicus radars and KAZR radars.
     """
 
     def __init__(self, full_path: str, site_meta: dict):
