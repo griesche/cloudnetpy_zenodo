@@ -7,6 +7,7 @@ from cloudnetpy.categorize.lidar import Lidar
 from cloudnetpy.categorize.model import Model
 from cloudnetpy.categorize.mwr import Mwr
 from cloudnetpy.categorize.radar import Radar
+from cloudnetpy.categorize.disdrometer import Disdrometer
 from cloudnetpy.exceptions import ValidTimeStampError
 from cloudnetpy.metadata import MetaData
 
@@ -52,6 +53,8 @@ def generate_categorize(input_files: dict, output_file: str, uuid: Optional[str]
         data["model"].interpolate_to_common_height(wl_band)
         data["model"].interpolate_to_grid(time, height)
         data["mwr"].rebin_to_grid(time)
+        if "disdrometer" in data:
+            data["disdrometer"].rebin_to_grid(time)
         radar_data_gap_indices = data["radar"].rebin_to_grid(time)
         lidar_data_gap_indices = data["lidar"].interpolate_to_grid(time, height)
         bad_time_indices = list(set(radar_data_gap_indices + lidar_data_gap_indices))
@@ -61,30 +64,45 @@ def generate_categorize(input_files: dict, output_file: str, uuid: Optional[str]
     def _screen_bad_time_indices(valid_indices: list) -> None:
         n_time_full = len(time)
         data["radar"].time = time[valid_indices]
-        for var in ("radar", "lidar", "mwr", "model"):
-            for key, item in data[var].data.items():
-                if utils.isscalar(item.data):
-                    continue
-                array = item[:]
-                if array.shape[0] == n_time_full:
-                    if array.ndim == 1:
-                        array = array[valid_indices]
-                    elif array.ndim == 2:
-                        array = array[valid_indices, :]
-                    else:
+        for var in ("radar", "lidar", "mwr", "model","disdrometer"):
+            if var in data:
+                for key, item in data[var].data.items():
+                    if utils.isscalar(item.data):
                         continue
-                    data[var].data[key].data = array
+                    array = item[:]
+                    if array.shape[0] == n_time_full:
+                        if array.ndim == 1:
+                            array = array[valid_indices]
+                        elif array.ndim == 2:
+                            array = array[valid_indices, :]
+                        else:
+                            continue
+                        data[var].data[key].data = array
         for key, item in data["model"].data_dense.items():
             data["model"].data_dense[key] = item[valid_indices, :]
 
     def _prepare_output() -> dict:
         data["radar"].add_meta()
         data["model"].screen_sparse_fields()
-        for key in ("category_bits", "rain_rate", "insect_prob"):
-            data["radar"].append_data(getattr(classification, key), key)
+        if "disdrometer" in data:
+            for key in ("category_bits", "insect_prob"):
+                data["radar"].append_data(getattr(classification, key), key)
+#            data["radar"].append_data(getattr(classification, "category_bits"), "category_bits")
+        else:
+            for key in ("category_bits", "rain_rate", "insect_prob"):
+                data["radar"].append_data(getattr(classification, key), key)
         for key in ("radar_liquid_atten", "radar_gas_atten"):
             data["radar"].append_data(attenuations[key], key)
         data["radar"].append_data(quality["quality_bits"], "quality_bits")
+        if "disdrometer" in data:
+            return {
+                **data["radar"].data,
+                **data["lidar"].data,
+                **data["model"].data,
+                **data["model"].data_sparse,
+                **data["mwr"].data,
+                **data["disdrometer"].data,
+            }
         return {
             **data["radar"].data,
             **data["lidar"].data,
@@ -101,13 +119,24 @@ def generate_categorize(input_files: dict, output_file: str, uuid: Optional[str]
             obj.close()
 
     try:
-        data = {
-            "radar": Radar(input_files["radar"]),
-            "lidar": Lidar(input_files["lidar"]),
-            "mwr": Mwr(input_files["mwr"]),
-        }
+        if "disdrometer" in input_files:
+            data = {
+                "radar": Radar(input_files["radar"]),
+                "lidar": Lidar(input_files["lidar"]),
+                "mwr": Mwr(input_files["mwr"]),
+                "disdrometer": Disdrometer(input_files["disdrometer"])
+            }
+        else:
+            data = {
+                "radar": Radar(input_files["radar"]),
+                "lidar": Lidar(input_files["lidar"]),
+                "mwr": Mwr(input_files["mwr"]),
+            }
         assert data["radar"].altitude is not None
-        data["model"] = Model(input_files["model"], data["radar"].altitude)
+        if 'model' in input_files.keys():
+            data["model"] = Model(input_files["model"], data["radar"].altitude)
+        if 'radiosonde' in input_files.keys():
+            data["model"] = Model(input_files["radiosonde"], data["radar"].altitude)
         time, height = _define_dense_grid()
         valid_ind = _interpolate_to_cloudnet_grid()
         if not valid_ind:
@@ -285,6 +314,11 @@ CATEGORIZE_ATTRIBUTES = {
     "beta_bias": MetaData(
         long_name="Bias in attenuated backscatter coefficient",
         units="dB",
+    ),
+    "lidar_depolarization": MetaData(
+        long_name="Calibrated volume depolarization (532 nm)",
+        units="1",
+        comment="SNR-screened calibrated volume depolarization 532 nm",
     ),
     "lidar_wavelength": MetaData(long_name="Laser wavelength", units="nm"),
     # MWR variables
