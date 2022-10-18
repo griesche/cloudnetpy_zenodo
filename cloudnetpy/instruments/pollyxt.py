@@ -1,12 +1,14 @@
 """Module for reading / converting pollyxt data."""
-import glob
 import logging
+import glob
 from typing import Optional, Union
 
 import netCDF4
 import numpy as np
 from numpy import ma
 from numpy.testing import assert_array_equal
+import csv
+from datetime import datetime
 
 from cloudnetpy import output, utils
 from cloudnetpy.instruments import instruments
@@ -14,6 +16,7 @@ from cloudnetpy.instruments.ceilometer import Ceilometer
 from cloudnetpy.metadata import MetaData
 from cloudnetpy.utils import Epoch
 
+WAVELEGNTHS = [1064,532,355]
 
 def pollyxt2nc(
     input_folder: str,
@@ -77,12 +80,20 @@ class PollyXt(Ceilometer):
                 array[np.isnan(array)] = ma.masked
 
     def calc_screened_products(self, snr_limit: float = 5.0):
-        keys = ("beta", "depolarisation")
-        for key in keys:
-            self.data[key] = ma.masked_where(self.data["snr"] < snr_limit, self.data[f"{key}_raw"])
-        self.data["depolarisation"][self.data["depolarisation"] > 1] = ma.masked
-        self.data["depolarisation"][self.data["depolarisation"] < 0] = ma.masked
-        del self.data["snr"]
+        for wavelength in WAVELEGNTHS:
+            beta_key = "beta_%i" %wavelength
+            snr_key = "snr_%i" %wavelength
+            snr_key_nr = "snr_%i_nr" %wavelength
+            if f"{beta_key}_raw" in self.data.keys(): 
+                self.data[beta_key] = ma.masked_where(self.data[snr_key] < snr_limit, self.data[f"{beta_key}_raw"])
+            beta_nr_key = "beta_%i_nr" %wavelength
+            if f"{beta_nr_key}_raw" in self.data.keys():
+                self.data[beta_nr_key] = ma.masked_where(self.data[snr_key_nr] < snr_limit, self.data[f"{beta_nr_key}_raw"])
+            depol_key = "depolarisation_%i" %wavelength
+            if f"{depol_key}_raw" in self.data.keys(): 
+                self.data[depol_key] = ma.masked_where(self.data[snr_key] < snr_limit, self.data[f"{depol_key}_raw"])
+                self.data[depol_key][self.data[depol_key] > 1] = ma.masked
+                self.data[depol_key][self.data[depol_key] < 0] = ma.masked
 
     def fetch_zenith_angle(self) -> None:
         default = 5
@@ -92,91 +103,291 @@ class PollyXt(Ceilometer):
         """Read input data."""
         bsc_files = glob.glob(f"{input_folder}/*[0-9]_att*.nc")
         depol_files = glob.glob(f"{input_folder}/*[0-9]_vol*.nc")
-        bsc_files.sort()
-        depol_files.sort()
         if not bsc_files:
             raise RuntimeError("No pollyxt files found")
         if len(bsc_files) != len(depol_files):
             raise RuntimeError("Inconsistent number of pollyxt bsc / depol files")
-        self.data["range"] = _read_array_from_multiple_files(bsc_files, depol_files, "height")
+        bsc_nr_files = glob.glob(f'{input_folder}/*[0-9]_NR_att*.nc')
+        if len(bsc_nr_files) > 0:
+            if len(bsc_files) != len(bsc_nr_files):
+                raise RuntimeError("Inconsistent number of pollyxt bsc / pollyxt bsc nr files")
+            bsc_nr_files.sort()
+            self.data["range"] = _read_array_from_three_filelists(bsc_files, bsc_nr_files, depol_files, "height")
+            epoch = _include_nr_data(self, input_folder)
+            return epoch
+        bsc_files.sort()
+        depol_files.sort()
         calibration_factors: np.ndarray = np.array([])
-        beta_channel = self._get_valid_beta_channel(bsc_files)
-        bsc_key = f"attenuated_backscatter_{beta_channel}nm"
+        self.data["range"] = _read_array_from_multiple_files(bsc_files, depol_files, "height")
         for (bsc_file, depol_file) in zip(bsc_files, depol_files):
-            with netCDF4.Dataset(bsc_file, "r") as nc_bsc, netCDF4.Dataset(
-                depol_file, "r"
-            ) as nc_depol:
-                epoch = utils.get_epoch(nc_bsc["time"].unit)
-                try:
-                    time = np.array(_read_array_from_file_pair(nc_bsc, nc_depol, "time"))
-                except AssertionError as err:
-                    logging.warning(f"Ignoring files '{nc_bsc}' and '{nc_depol}': {err}")
-                    continue
-                beta_raw = nc_bsc.variables[bsc_key][:]
-                depol_raw = nc_depol.variables["volume_depolarization_ratio_532nm"][:]
-                snr = nc_bsc.variables[f"SNR_{beta_channel}nm"][:]
-                for array, key in zip(
-                    [beta_raw, depol_raw, time, snr],
-                    ["beta_raw", "depolarisation_raw", "time", "snr"],
-                ):
-                    self.data = utils.append_data(self.data, key, array)
-                calibration_factor = nc_bsc.variables[bsc_key].Lidar_calibration_constant_used
-                calibration_factor = np.repeat(calibration_factor, len(time))
-                calibration_factors = np.concatenate([calibration_factors, calibration_factor])
-        self.data["calibration_factor"] = calibration_factors
+            nc_bsc = netCDF4.Dataset(bsc_file, "r")
+            nc_depol = netCDF4.Dataset(depol_file, "r")
+            epoch = utils.get_epoch(nc_bsc["time"].unit)
+            try:
+                time = np.array(_read_array_from_file_pair(nc_bsc, nc_depol, "time"))
+            except AssertionError:
+                _close(nc_bsc, nc_depol)
+                continue
+            for idx_wavelength,wavelength in enumerate(WAVELEGNTHS):
+                bsc_key = "attenuated_backscatter_%inm" %wavelength
+                if bsc_key in nc_bsc.variables:
+                    bsc_out_key = "beta_%i_raw" %wavelength
+                    self.data = utils.append_data(self.data, bsc_out_key, nc_bsc.variables[bsc_key][:])
+                    cal_fac_key = "calibration_factor_%i" %wavelength
+                    calibration_factor = nc_bsc.variables[bsc_key].Lidar_calibration_constant_used
+                    calibration_factor = np.repeat(calibration_factor, len(time))
+                    self.data = utils.append_data(self.data, cal_fac_key, calibration_factor)
+                snr_key = "SNR_%inm" %wavelength
+                if snr_key in nc_bsc.variables:
+                    snr_out_key = "snr_%i" %wavelength
+                    self.data = utils.append_data(self.data, snr_out_key, nc_bsc.variables[snr_key][:])
+                depol_key = "volume_depolarization_ratio_%inm" %wavelength
+                if depol_key in nc_depol.variables:
+                    depol_out_key = "depolarisation_%i_raw" %wavelength
+                    self.data = utils.append_data(self.data, depol_out_key, nc_depol.variables[depol_key][:])
+            self.data = utils.append_data(self.data, "time", time)
+            #### hannes
+            self.data = _mask_blowing_snow_events(self,time)
+            ####
+            _close(nc_bsc, nc_depol)
         return epoch
 
-    def _get_valid_beta_channel(self, files: list) -> str:
-        polly_channels = ("1064", "532", "355")
-        for channel in polly_channels:
-            for file in files:
-                with netCDF4.Dataset(file, "r") as nc:
-                    beta = nc.variables[f"attenuated_backscatter_{channel}nm"][:]
-                    if not _only_zeros_or_masked(beta):
-                        if channel != polly_channels[0]:
-                            logging.warning(f"Using {channel}nm pollyXT channel for backscatter")
-                            self.instrument.wavelength = float(channel)  # type: ignore
-                        return channel
-        raise RuntimeError("No functional pollyXT backscatter channels found")
+#### hannes 
+def _mask_blowing_snow_events(self,time):
+    file_blowing_snow = '/home/griesche/MOSAiC/blowing_snow.csv'
+    blowing_snow_events = []
+    with open(file_blowing_snow,newline='') as csvfile:
+        has_header = csv.Sniffer().has_header(csvfile.read(1024))
+        zero = csvfile.seek(0)
+        csvreader = csv.reader(csvfile,delimiter=';')
+        if has_header:
+            head = next(csvreader)
+        snow_events = [[_datetime_to_seconds(np.datetime64(row[0][6:10]+'-'+row[0][3:5]+'-'+row[0][:2]+'T'+row[0][11:16])),
+                        _datetime_to_seconds(np.datetime64(row[1][6:10]+'-'+row[1][3:5]+'-'+row[1][:2]+'T'+row[1][11:16]+'Z'))] 
+                       for row in csvreader]
+    for snow_event in snow_events:
+        if ((self.data['time'][0] < snow_event[1] and self.data['time'][-1] > snow_event[1]) or 
+            (self.data['time'][-1] > snow_event[0] and self.data['time'][-1] < snow_event[1])):
+            tidx_start_snow = np.argmin(abs(self.data['time']-snow_event[0]))
+            tidx_end_snow = np.argmin(abs(self.data['time']-snow_event[1]))
+            for key in self.data.keys():
+                if len(self.data[key].shape)<2:
+                    continue
+                if len(self.data[key].shape)==2:
+                    self.data[key][tidx_start_snow:tidx_end_snow,:] = np.ones((tidx_end_snow-tidx_start_snow,self.data[key].shape[1])) * np.nan 
+    return self.data
 
+def _datetime_to_seconds(datetime:np.datetime64):
+    return (datetime - np.datetime64('1970-01-01T00:00:00')) / np.timedelta64(1,'s')
+
+def _include_nr_data(self, input_folder: str) -> Epoch:
+    bsc_files = glob.glob(f"{input_folder}/*[0-9]_att*.nc")
+    bsc_nr_files = glob.glob(f"{input_folder}/*[0-9]_NR_att*.nc")
+    depol_files = glob.glob(f"{input_folder}/*[0-9]_vol*.nc")
+    bsc_files.sort()
+    bsc_nr_files.sort()
+    depol_files.sort()
+    calibration_factors: np.ndarray = np.array([])
+    for (bsc_file, bsc_nr_file, depol_file) in zip(bsc_files, bsc_nr_files, depol_files):
+        nc_bsc = netCDF4.Dataset(bsc_file, "r")
+        nc_bsc_nr = netCDF4.Dataset(bsc_nr_file, "r")
+        nc_depol = netCDF4.Dataset(depol_file, "r")
+        epoch = utils.get_epoch(nc_bsc["time"].unit)
+        try:
+            time = np.array(_read_array_from_file_triplet(nc_bsc, nc_bsc_nr,  nc_depol, "time"))
+        except AssertionError:
+            _close(nc_bsc, nc_bsc_nr, nc_depol)
+            continue
+        cal_facts = {"calibration_factor_1064":[],"calibration_factor_532":[],"calibration_factor_355":[]}
+        for idx_wavelength,wavelength in enumerate(WAVELEGNTHS):
+            bsc_key = "attenuated_backscatter_%inm" %wavelength
+            if bsc_key in nc_bsc.variables:
+                bsc_out_key = "beta_%i_raw" %wavelength
+                self.data = utils.append_data(self.data, bsc_out_key, nc_bsc.variables[bsc_key][:])
+                cal_fac_key = "calibration_factor_%i" %wavelength
+                calibration_factor = nc_bsc.variables[bsc_key].Lidar_calibration_constant_used
+                calibration_factor = np.repeat(calibration_factor, len(time))
+                self.data = utils.append_data(self.data, cal_fac_key, calibration_factor)
+            if bsc_key in nc_bsc_nr.variables:
+                bsc_out_key = "beta_%i_nr_raw" %wavelength
+                self.data = utils.append_data(self.data, bsc_out_key, nc_bsc_nr.variables[bsc_key][:])
+                cal_fac_key = "calibration_factor_%i_nr" %wavelength
+                calibration_factor = nc_bsc_nr.variables[bsc_key].Lidar_calibration_constant_used
+                calibration_factor = np.repeat(calibration_factor, len(time))
+                self.data = utils.append_data(self.data, cal_fac_key, calibration_factor)
+            snr_key = "SNR_%inm" %wavelength
+            if snr_key in nc_bsc.variables:
+                snr_out_key = "snr_%i" %wavelength
+                self.data = utils.append_data(self.data, snr_out_key, nc_bsc.variables[snr_key][:])
+            if snr_key in nc_bsc_nr.variables:
+                snr_out_key = "snr_%i_nr" %wavelength
+                self.data = utils.append_data(self.data, snr_out_key, nc_bsc_nr.variables[snr_key][:])
+            depol_key = "volume_depolarization_ratio_%inm" %wavelength
+            if depol_key in nc_depol.variables:
+                depol_out_key = "depolarisation_%i_raw" %wavelength
+                self.data = utils.append_data(self.data, depol_out_key, nc_depol.variables[depol_key][:])
+        self.data = utils.append_data(self.data, "time", time)
+        self.data = _mask_blowing_snow_events(self,time)
+        _close(nc_bsc, nc_bsc_nr, nc_depol)
+    return epoch
+
+def _read_array_from_three_filelists(files1: list, files2: list, files3: list, key) -> np.ndarray:
+    array: np.ndarray = np.array([])
+    for ind, (file1, file2, file3) in enumerate(zip(files1, files2, files3)):
+        nc1 = netCDF4.Dataset(file1, "r")
+        nc2 = netCDF4.Dataset(file2, "r")
+        nc3 = netCDF4.Dataset(file3, "r")
+        array1 = _read_array_from_file_triplet(nc1, nc2, nc3, key)
+        if ind == 0:
+            array = array1
+        _close(nc1, nc2, nc3)
+        assert_array_equal(array, array1)
+    return np.array(array)
+
+def _read_array_from_file_triplet(
+    nc_file1: netCDF4.Dataset, nc_file2: netCDF4.Dataset, nc_file3: netCDF4.Dataset,key: str
+) -> np.ndarray:
+    array1 = nc_file1.variables[key][:]
+    array2 = nc_file2.variables[key][:]
+    array3 = nc_file3.variables[key][:]
+    assert_array_equal(array1, array2)
+    assert_array_equal(array1, array3)
+    return array1
+####
 
 def _read_array_from_multiple_files(files1: list, files2: list, key) -> np.ndarray:
     array: np.ndarray = np.array([])
     for ind, (file1, file2) in enumerate(zip(files1, files2)):
-        with netCDF4.Dataset(file1, "r") as nc1, netCDF4.Dataset(file2, "r") as nc2:
-            array1 = _read_array_from_file_pair(nc1, nc2, key)
-            if ind == 0:
-                array = array1
-        assert_array_equal(array, array1, f"Inconsistent variable '{key}'")
+        nc1 = netCDF4.Dataset(file1, "r")
+        nc2 = netCDF4.Dataset(file2, "r")
+        array1 = _read_array_from_file_pair(nc1, nc2, key)
+        if ind == 0:
+            array = array1
+        _close(nc1, nc2)
+        assert_array_equal(array, array1)
     return np.array(array)
-
 
 def _read_array_from_file_pair(
     nc_file1: netCDF4.Dataset, nc_file2: netCDF4.Dataset, key: str
 ) -> np.ndarray:
     array1 = nc_file1.variables[key][:]
     array2 = nc_file2.variables[key][:]
-    assert_array_equal(array1, array2, f"Inconsistent variable '{key}'")
+    assert_array_equal(array1, array2)
     return array1
 
-
-def _only_zeros_or_masked(data: ma.MaskedArray) -> bool:
-    return ma.sum(data) == 0 or data.mask.all()
+def _close(*args) -> None:
+    for arg in args:
+        arg.close()
 
 
 ATTRIBUTES = {
-    "depolarisation": MetaData(
+    "beta_1064": MetaData(
+        long_name="Attenuated backscatter coefficient",
+        units="sr-1 m-1",
+        comment="SNR-screened attenuated backscatter coefficient at 1064 nm. SNR threshold applied: 2.",
+    ),
+    "beta_532": MetaData(
+        long_name="Attenuated backscatter coefficient",
+        units="sr-1 m-1",
+        comment="SNR-screened attenuated backscatter coefficient at 532 nm. SNR threshold applied: 2.",
+    ),
+    "beta_355": MetaData(
+        long_name="Attenuated backscatter coefficient",
+        units="sr-1 m-1",
+        comment="SNR-screened attenuated backscatter coefficient at 355 nm. SNR threshold applied: 2.",
+    ),
+    "beta_1064_raw": MetaData(
+        long_name="Attenuated backscatter coefficient",
+        units="sr-1 m-1",
+        comment="Non-screened attenuated backscatter coefficient at 1064 nm.",
+    ),
+    "beta_532_raw": MetaData(
+        long_name="Attenuated backscatter coefficient",
+        units="sr-1 m-1",
+        comment="Non-screened attenuated backscatter coefficient at 532 nm.",
+    ),
+    "beta_355_raw": MetaData(
+        long_name="Attenuated backscatter coefficient",
+        units="sr-1 m-1",
+        comment="Non-screened attenuated backscatter coefficient at 355 nm.",
+    ),
+    "depolarisation_1064": MetaData(
+        long_name="Lidar volume linear depolarisation ratio",
+        units="1",
+        comment="SNR-screened lidar volume linear depolarisation ratio at 1064 nm.",
+    ),
+    "depolarisation_532": MetaData(
         long_name="Lidar volume linear depolarisation ratio",
         units="1",
         comment="SNR-screened lidar volume linear depolarisation ratio at 532 nm.",
     ),
-    "depolarisation_raw": MetaData(
+    "depolarisation_355": MetaData(
+        long_name="Lidar volume linear depolarisation ratio",
+        units="1",
+        comment="SNR-screened lidar volume linear depolarisation ratio at 355 nm.",
+    ),
+    "depolarisation_1064_raw": MetaData(
+        long_name="Lidar volume linear depolarisation ratio",
+        units="1",
+        comment="Non-screened lidar volume linear depolarisation ratio at 1064 nm.",
+    ),
+    "depolarisation_532_raw": MetaData(
         long_name="Lidar volume linear depolarisation ratio",
         units="1",
         comment="Non-screened lidar volume linear depolarisation ratio at 532 nm.",
     ),
-    "calibration_factor": MetaData(
-        long_name="Attenuated backscatter calibration factor",
+    "depolarisation_355_raw": MetaData(
+        long_name="Lidar volume linear depolarisation ratio",
+        units="1",
+        comment="Non-screened lidar volume linear depolarisation ratio at 355 nm.",
+    ),
+    "snr_1064": MetaData(
+        long_name="Signal-to-Noise Ratio (1064 nm)",
+        units=" ",
+        comment="SNR of respective channel calculated according to Heese et al., 2010, ACP: \n Ceilometer lidar comparison: backscatter coefficient retrieval and signal-to-noise ratio determination.",
+    ),
+    "snr_532": MetaData(
+        long_name="Signal-to-Noise Ratio (532 nm)",
+        units=" ",
+        comment="SNR of respective channel calculated according to Heese et al., 2010, ACP: \n Ceilometer lidar comparison: backscatter coefficient retrieval and signal-to-noise ratio determination.",
+    ),
+    "snr_355": MetaData(
+        long_name="Signal-to-Noise Ratio (355 nm)",
+        units=" ",
+        comment="SNR of respective channel calculated according to Heese et al., 2010, ACP: \n Ceilometer lidar comparison: backscatter coefficient retrieval and signal-to-noise ratio determination.",
+    ),
+    "snr_532_nr": MetaData(
+        long_name="Signal-to-Noise Ratio (532 nm near range)",
+        units=" ",
+        comment="SNR of respective channel calculated according to Heese et al., 2010, ACP: \n Ceilometer lidar comparison: backscatter coefficient retrieval and signal-to-noise ratio determination.",
+    ),
+    "snr_355_nr": MetaData(
+        long_name="Signal-to-Noise Ratio (355 nm near range)",
+        units=" ",
+        comment="SNR of respective channel calculated according to Heese et al., 2010, ACP: \n Ceilometer lidar comparison: backscatter coefficient retrieval and signal-to-noise ratio determination.",
+    ),
+    "calibration_factor_1064": MetaData(
+        long_name="Attenuated backscatter at 1064 calibration factor",
+        units="1",
+        comment="Calibration factor applied.",
+    ),
+    "calibration_factor_532": MetaData(
+        long_name="Attenuated backscatter at 532 calibration factor",
+        units="1",
+        comment="Calibration factor applied.",
+    ),
+    "calibration_factor_355": MetaData(
+        long_name="Attenuated backscatter at 355 calibration factor",
+        units="1",
+        comment="Calibration factor applied.",
+    ),
+    "calibration_factor_532_nr": MetaData(
+        long_name="Attenuated backscatter at 532 near range calibration factor",
+        units="1",
+        comment="Calibration factor applied.",
+    ),
+    "calibration_factor_355_nr": MetaData(
+        long_name="Attenuated backscatter at 355 near range calibration factor",
         units="1",
         comment="Calibration factor applied.",
     ),
