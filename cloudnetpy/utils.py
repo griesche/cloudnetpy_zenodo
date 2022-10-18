@@ -754,6 +754,7 @@ def fetch_cloudnet_model_types() -> list:
     data = requests.get(url=url, timeout=60).json()
     models = [model["id"] for model in data]
     model_types = [model.split("-")[0] for model in models]
+    model_types.append('radiosonde')
     return list(set(model_types))
 
 
