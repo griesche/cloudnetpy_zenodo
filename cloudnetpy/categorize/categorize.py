@@ -64,7 +64,7 @@ def generate_categorize(input_files: dict, output_file: str, uuid: Optional[str]
     def _screen_bad_time_indices(valid_indices: list) -> None:
         n_time_full = len(time)
         data["radar"].time = time[valid_indices]
-        for var in ("radar", "lidar", "mwr", "model","disdrometer"):
+        for var in ("radar", "lidar", "mwr", "model", "disdrometer"):
             if var in data:
                 for key, item in data[var].data.items():
                     if utils.isscalar(item.data):

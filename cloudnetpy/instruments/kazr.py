@@ -85,7 +85,6 @@ def kazr2nc(
     kazr = Kazr(nc_filename, site_meta)
     kazr.init_data(keymap)
     if kazr.init_time[0] == '23':
-        print('get time offset')
         kazr.time_offset = kazr._get_time_offset()
         kazr.date = kazr._init_kazr_date()
     if date is not None:
