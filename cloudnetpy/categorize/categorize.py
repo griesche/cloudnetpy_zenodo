@@ -87,7 +87,6 @@ def generate_categorize(input_files: dict, output_file: str, uuid: Optional[str]
         if "disdrometer" in data:
             for key in ("category_bits", "insect_prob"):
                 data["radar"].append_data(getattr(classification, key), key)
-#            data["radar"].append_data(getattr(classification, "category_bits"), "category_bits")
         else:
             for key in ("category_bits", "rain_rate", "insect_prob"):
                 data["radar"].append_data(getattr(classification, key), key)

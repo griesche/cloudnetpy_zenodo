@@ -69,7 +69,7 @@ def kazr2nc(
         "nyquist_velocity": "nyquist_velocity",
     }
 
-    calibration_offset = 1 # kazr_ge = 1 , kazr_md = 6
+    calibration_offset = 6 # kazr_ge = 1 , kazr_md = 6
 
     if os.path.isdir(raw_kazr):
         temp_file = NamedTemporaryFile()  # pylint: disable=R1732

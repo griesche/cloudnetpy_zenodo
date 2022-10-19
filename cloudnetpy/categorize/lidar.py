@@ -18,7 +18,7 @@ class Lidar(DataSource):
 
     def __init__(self, full_path: str):
         super().__init__(full_path)
-        self.append_data(self.getvar("beta_532_nr"), "beta")  # below 3 km: use 532 near range data
+        self.append_data(self.getvar("beta_532"), "beta")  # above 3 km: use 532 far range data
         self.append_data(self.getvar("depolarisation_532"), "lidar_depolarisation")
         self._add_meta()
 
