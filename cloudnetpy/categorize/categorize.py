@@ -1,5 +1,6 @@
 """Module that generates Cloudnet categorize file."""
 from typing import Optional, Union
+import numpy as np
 
 from cloudnetpy import output, utils
 from cloudnetpy.categorize import atmos, classify
@@ -117,20 +118,41 @@ def generate_categorize(input_files: dict, output_file: str, uuid: Optional[str]
         for obj in data.values():
             obj.close()
 
+    def _merge_b3k_a3k():
+        print('merge b3k a3k')
+        lidar_merge_hidx = 133#20
+        radar_merge_hidx = 95
+        radar_a3k_merge_hidx = np.argmin(abs(data_a3k["radar"].height-data["radar"].height[radar_merge_hidx]))
+        radar_a3k_max_hidx = data_a3k["radar"].height.shape[0]-(radar_merge_hidx-radar_a3k_merge_hidx)
+        for key in data["radar"].data.keys():
+            if key == 'nyquist_velocity':
+                continue
+            data["radar"].data[key].data[:,radar_merge_hidx:] = data_a3k["radar"].data[key].data[:,radar_a3k_merge_hidx:radar_a3k_max_hidx]
+        for key in data["lidar"].data.keys():
+            if key in ['lidar_wavelength','beta_error','beta_bias']:
+                continue
+            data["lidar"].data[key].data[:,lidar_merge_hidx:] = data_a3k["lidar"].data[key].data[:,lidar_merge_hidx:]
+        return data["radar"],data["lidar"]
+
     try:
         if "disdrometer" in input_files:
             data = {
                 "radar": Radar(input_files["radar"]),
-                "lidar": Lidar(input_files["lidar"]),
+                "lidar": Lidar(input_files["lidar"], "beta_532_nr"),
                 "mwr": Mwr(input_files["mwr"]),
                 "disdrometer": Disdrometer(input_files["disdrometer"])
             }
         else:
             data = {
                 "radar": Radar(input_files["radar"]),
-                "lidar": Lidar(input_files["lidar"]),
+                "lidar": Lidar(input_files["lidar"], "beta_532_nr"),
                 "mwr": Mwr(input_files["mwr"]),
-            }
+                }
+        data_a3k = {
+            "radar": Radar(input_files["radar_a3k"]),
+            "lidar": Lidar(input_files["lidar_a3k"], "beta_532"),
+        }
+        data["radar"],data["lidar"] = _merge_b3k_a3k()
         assert data["radar"].altitude is not None
         if 'model' in input_files.keys():
             data["model"] = Model(input_files["model"], data["radar"].altitude)
