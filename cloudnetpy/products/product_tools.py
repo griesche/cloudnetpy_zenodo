@@ -216,6 +216,34 @@ def read_nc_fields(nc_file: str, names: Union[str, list]) -> Union[ma.MaskedArra
         data = [nc.variables[name][:] for name in names]
     return data[0] if len(data) == 1 else data
 
+def get_lls(pollyxt_file: str, categorize_file: str, SNR_threshold: int) -> np.ndarray:
+    height = read_nc_fields(pollyxt_file, "height")
+    height_cat = read_nc_fields(categorize_file, "height")
+    time_polly = read_nc_fields(pollyxt_file, "time")
+    snr_532_nr = read_nc_fields(pollyxt_file, "snr_532_nr")
+
+    hidx_50m = len(
+        height[height<=50])-1
+    hix_max_lls_height = len(
+        height[height<=height_cat[0]])+1
+
+    snr_masked = np.ma.masked_less(snr_532_nr[:,:hix_max_lls_height],SNR_threshold).filled(0)
+    snr_masked = np.ma.masked_greater(snr_masked,0).filled(1)
+    snr_masked[:,:hidx_50m] = np.nan
+
+    lls_bounds = np.ones((snr_masked.shape[0],2)) * np.nan
+    lls = np.ones((snr_masked.shape[0])) * np.nan
+    for t in range(snr_masked.shape[0]):
+        if np.nansum(snr_masked[t,:hix_max_lls_height])>0:
+            lls[t] = 1
+        else:
+            lls[t] = 0
+            continue
+        hidx_lls=np.ma.where(snr_masked[t,:hix_max_lls_height]==1)
+        lls_bounds[t,0] = height[hidx_lls[0][0]]
+        lls_bounds[t,1] = height[hidx_lls[0][-1]]
+    return lls, lls_bounds
+
 def read_nc_field_source(nc_file: str, names: Union[str, list]) -> Union[ma.MaskedArray, list]:
     """Reads source instruement for selected variables from a netCDF file.
 
