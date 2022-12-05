@@ -119,13 +119,12 @@ def generate_categorize(input_files: dict, output_file: str, uuid: Optional[str]
             obj.close()
 
     def _merge_b3k_a3k():
-        print('merge b3k a3k')
         lidar_merge_hidx = 133#20
         radar_merge_hidx = 95
         radar_a3k_merge_hidx = np.argmin(abs(data_a3k["radar"].height-data["radar"].height[radar_merge_hidx]))
         radar_a3k_max_hidx = data_a3k["radar"].height.shape[0]-(radar_merge_hidx-radar_a3k_merge_hidx)
         for key in data["radar"].data.keys():
-            if key == 'nyquist_velocity':
+            if key in ["nyquist_velocity", "latitude", "longitude"]:
                 continue
             data["radar"].data[key].data[:,radar_merge_hidx:] = data_a3k["radar"].data[key].data[:,radar_a3k_merge_hidx:radar_a3k_max_hidx]
         for key in data["lidar"].data.keys():
@@ -133,6 +132,7 @@ def generate_categorize(input_files: dict, output_file: str, uuid: Optional[str]
                 continue
             data["lidar"].data[key].data[:,lidar_merge_hidx:] = data_a3k["lidar"].data[key].data[:,lidar_merge_hidx:]
         return data["radar"],data["lidar"]
+
 
     try:
         if "disdrometer" in input_files:
@@ -207,6 +207,8 @@ def _save_cat(full_path: str, data_obs: dict, cloudnet_arrays: dict, uuid: Union
         nc.references = output.get_references(file_type)
         output.add_source_instruments(nc, data_obs)
         output.merge_history(nc, file_type, data_obs)
+        nc.dependencies = output.add_dependencies()
+        nc.comment = output.add_comment()
     return uuid_out
 
 

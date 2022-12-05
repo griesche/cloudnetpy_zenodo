@@ -1,7 +1,7 @@
 """Radar module, containing the :class:`Radar` class."""
 import logging
 import math
-from typing import Union
+from typing import List, Union
 
 import numpy as np
 from numpy import ma
@@ -65,7 +65,7 @@ class Radar(DataSource):
                 )
             elif key == "v_sigma":
                 array.calc_linear_std(self.time, time_new)
-            elif key in ("width", "rain_rate"):
+            elif key in ("width", "rain_rate", "latitude", "longitude"):
                 array.rebin_data(self.time, time_new)
             else:
                 continue
@@ -256,14 +256,15 @@ class Radar(DataSource):
 
     def add_meta(self) -> None:
         """Copies misc. metadata from the input file."""
-        for key in ("latitude", "longitude", "altitude"):
-            self.append_data(np.array(self.getvar(key)), key)
+        #for key in ("latitude", "longitude", "altitude"):
+        key = "altitude"
+        self.append_data(np.array(self.getvar(key)), key)
         for key in ("time", "height", "radar_frequency"):
             self.append_data(np.array(getattr(self, key)), key)
 
     def _init_data(self):
         self.append_data(self.getvar("Zh"), "Z", units="dBZ")
-        for key in ("v", "ldr", "width", "sldr", "rain_rate"):
+        for key in ("v", "ldr", "width", "sldr", "rain_rate", "latitude", "longitude"):
             try:
                 self._variables_to_cloudnet_arrays((key,))
             except KeyError:
@@ -293,10 +294,12 @@ class Radar(DataSource):
         raise RuntimeError("Unable to determine folding velocity")
 
     def _get_folding_velocity_full(self):
-        folding_velocity = []
+        folding_velocity: Union[List, np.ndarray] = []
         if utils.isscalar(self.folding_velocity):
             folding_velocity = np.repeat(self.folding_velocity, len(self.sequence_indices[0]))
         else:
+            assert isinstance(folding_velocity, list)
+            assert isinstance(self.folding_velocity, np.ndarray)
             for indices, velocity in zip(self.sequence_indices, self.folding_velocity):
                 folding_velocity.append(np.repeat(velocity, len(indices)))
             folding_velocity = np.hstack(folding_velocity)

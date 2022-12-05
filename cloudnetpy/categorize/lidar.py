@@ -59,7 +59,7 @@ class Lidar(DataSource):
         return bad_time_indices
 
     def _add_meta(self) -> None:
-        self.append_data(float(self.getvar("wavelength")), "lidar_wavelength")
+        self.append_data(float(self.getvar("wavelength")[1]), "lidar_wavelength")
         self.append_data(0.5, "beta_error")
         self.append_data(3.0, "beta_bias")
 

@@ -65,10 +65,13 @@ def find_melting_layer(obs: ClassData, smooth: bool = True) -> np.ndarray:
     for ind, t_prof in enumerate(obs.tw):
 
         temp_indices = _get_temp_indices(t_prof, t_range)
+        if len(temp_indices) <= 1:
+            continue
         z_prof = obs.z[ind, temp_indices]
         v_prof = obs.v[ind, temp_indices]
 
         if ldr_diff is not None:
+            assert hasattr(obs, "ldr")
             ldr_prof = obs.ldr[ind, temp_indices]
             ldr_dprof = ldr_diff[ind, temp_indices]
 
@@ -154,10 +157,12 @@ def _basetop(dprof: np.ndarray, pind: int) -> Tuple[int, int]:
 
 def _get_temp_indices(t_prof: np.ndarray, t_range: tuple) -> np.ndarray:
     """Finds indices of temperature profile covering the given range."""
-    bottom_point = np.where(t_prof < (T0 - t_range[0]))[0][0]
-    top_point = np.where(t_prof > (T0 + t_range[0]))[0]
-    top_point = top_point[-1] if top_point.size > 0 else 0
-    return np.arange(bottom_point, top_point + 1)
+    #bottom_point = np.where(t_prof < (T0 - t_range[0]))[0][0]
+    #top_point = np.where(t_prof > (T0 + t_range[0]))[0]
+    #top_point = top_point[-1] if top_point.size > 0 else 0
+    #return np.arange(bottom_point, top_point + 1)
+    ind = np.where((t_prof > min(t_range) + T0) & (t_prof < max(t_range) + T0))[0]
+    return np.array([]) if len(ind) == 0 else np.arange(min(ind), max(ind) + 1)
 
 
 def _find_model_temperature_range(model_type: str) -> Tuple[float, float]:
