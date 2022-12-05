@@ -54,7 +54,7 @@ class CloudnetArray:
         """Masks data from given indices."""
         self.data[ind] = ma.masked
 
-    def rebin_data(self, time: np.ndarray, time_new: np.ndarray) -> list:
+    def rebin_data(self, time: np.ndarray, time_new: np.ndarray, statistic: str = "mean") -> list:
         """Rebins `data` in time.
 
         Args:
@@ -66,7 +66,7 @@ class CloudnetArray:
 
         """
         if self.data.ndim == 1:
-            self.data = utils.rebin_1d(time, self.data, time_new)
+            self.data = utils.rebin_1d(time, self.data, time_new, statistic)
             bad_indices = list(np.where(self.data == ma.masked)[0])
         else:
             assert isinstance(self.data, ma.MaskedArray)
@@ -89,6 +89,7 @@ class CloudnetArray:
                 setattr(self, key, data)
 
     def _init_data(self) -> np.ndarray:
+
         if isinstance(self.variable, netCDF4.Variable):
             return self.variable[:]
         if isinstance(self.variable, np.ndarray):
@@ -115,14 +116,6 @@ class CloudnetArray:
 
     def __getitem__(self, ind: tuple) -> np.ndarray:
         return self.data[ind]
-
-
-class RadarArray(CloudnetArray):
-    """The :class:`RadarArray` class, child of :class:`CloudnetArray`.
-
-    This class contains additional, cloud radar -specific methods.
-
-    """
 
     def filter_isolated_pixels(self) -> None:
         """Filters hot pixels from radar data."""

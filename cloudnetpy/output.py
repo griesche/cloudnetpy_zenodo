@@ -13,7 +13,7 @@ from cloudnetpy.metadata import COMMON_ATTRIBUTES, MetaData
 
 def save_level1b(obj, output_file: str, uuid: Optional[str] = None) -> str:
     """Saves Cloudnet Level 1b file."""
-    dimensions = {key: len(obj.data[key][:]) for key in ("time", "range") if key in obj.data}
+    dimensions = {key: len(obj.data[key][:]) for key in ("time", "range", "wavelength") if key in obj.data}
     if "chirp_start_indices" in obj.data:
         dimensions["chirp_sequence"] = len(obj.data["chirp_start_indices"][:])
     with init_file(output_file, dimensions, obj.data, uuid) as nc:
@@ -27,6 +27,8 @@ def save_level1b(obj, output_file: str, uuid: Optional[str] = None) -> str:
         nc.history = get_l1b_history(obj.instrument)
         nc.source = get_l1b_source(obj.instrument)
         nc.references = get_references()
+        nc.dependencies = add_dependencies()
+        nc.comment = add_comment()
     return file_uuid
 
 
@@ -45,16 +47,22 @@ def save_product_file(
     """
     human_readable_file_type = _get_identifier(short_id)
     dimensions = {"time": len(obj.time), "height": len(obj.dataset.variables["height"])}
+    if short_id == "lls": #No height dimension in LLS, only time
+        dimensions = {"time": len(obj.time)}#, "range": len(obj.dataset.variables["height"])}
     with init_file(file_name, dimensions, obj.data, uuid) as nc:
         file_uuid = nc.file_uuid
         nc.cloudnet_file_type = short_id
         vars_from_source = ("altitude", "latitude", "longitude", "time", "height") + copy_from_cat
+        if short_id == "lls": #No height dimension in LLS, only time
+            vars_from_source = ("altitude", "latitude", "longitude", "time") + copy_from_cat
         copy_variables(obj.dataset, nc, vars_from_source)
         nc.title = f"{human_readable_file_type.capitalize()} products from {obj.dataset.location}"
         nc.source_file_uuids = get_source_uuids(nc, obj)
         copy_global(obj.dataset, nc, ("location", "day", "month", "year", "source"))
         merge_history(nc, human_readable_file_type, {"categorize": obj})
         nc.references = get_references(short_id)
+        nc.dependencies = add_dependencies()
+        nc.comment = add_comment()
     return file_uuid
 
 
@@ -89,7 +97,30 @@ def get_references(identifier: Optional[str] = None) -> str:
             references += ", https://doi.org/10.1175/JAM2340.1"
         if identifier == "drizzle":
             references += ", https://doi.org/10.1175/JAM-2181.1"
+        if identifier == "der":
+            references += ", https://doi.org/10.1175/1520-0426(2002)019%3C0835:TROSCD%3E2.0.CO;2"
+        if identifier == "ier":
+            references += ", https://doi.org/10.5194/amt-13-5335-2020"
+        if identifier == "lls":
+            references += ", https://doi.org/10.5194/amt-13-5335-2020"
     return references
+
+def add_dependencies() -> str:
+    """ Returns dependencies of the data set"""
+    dependencies = 'https://doi.org/10.5281/zenodo.7310858' # issues flag of MOSAiC campaign
+    return dependencies
+
+
+def add_comment() -> str:
+    """ Returns comment"""
+    comment = (
+            "Data issues caused by external drivers are documented in a separate issue\n"
+            "tracking file. See the dependencies attribute for the most-recent version.\n"
+            "Flagged data must be handled with care and should be excluded from statistical\n"
+            "analyses. Issues tracking flags are identified by tethered balloon operation\n"
+            "periods and experienced-eye observations of MOSAiC staff."
+            )
+    return comment
 
 
 def get_source_uuids(*sources) -> str:
@@ -228,23 +259,8 @@ def add_source_attribute(attributes: dict, data: dict):
         "model": ("uwind", "vwind", "Tw", "q", "pressure", "temperature"),
     }
     if "disdrometer" in data:
-        variables = {
-            "radar": (
-                "v",
-                "width",
-                "v_sigma",
-                "ldr",
-                "Z",
-                "zdr",
-                "sldr",
-                "radar_frequency",
-                "nyquist_velocity",
-        ),
-        "lidar": ("beta", "lidar_depolarization", "lidar_wavelength"),
-        "mwr": ("lwp",),
-        "model": ("uwind", "vwind", "Tw", "q", "pressure", "temperature"),
-        "disdrometer": ("rain_rate",)
-        }
+        variables["radar"] = tuple(var for var in variables["radar"] if var != 'rain_rate')
+        variables["disdrometer"] = ("rain_rate",)
     for instrument, keys in variables.items():
         try:
             source = data[instrument].dataset.source
@@ -308,7 +324,7 @@ def _get_dimensions(nc: netCDF4.Dataset, data: np.ndarray) -> tuple:
 
 
 def _get_identifier(short_id: str) -> str:
-    valid_ids = ("lwc", "iwc", "drizzle", "classification", "der", "ier")
+    valid_ids = ("lwc", "iwc", "drizzle", "classification", "der", "ier", "lls")
     if short_id not in valid_ids:
         raise ValueError("Invalid product id.")
     if short_id == "iwc":
@@ -319,6 +335,8 @@ def _get_identifier(short_id: str) -> str:
         return "ice effective radius"
     if short_id == "der":
         return "droplet effective radius"
+    if short_id == "lls":
+        return "low-level stratus"
     return short_id
 
 

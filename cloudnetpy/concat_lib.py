@@ -119,6 +119,7 @@ class Concat:
             self.first_file[key].set_auto_scale(False)
             array = self.first_file[key][:]
             if 'scale_factor' in self.first_file[key].ncattrs():
+                # KAZR: each file of one day has a different scale factor
                 array = array * self.first_file[key].scale_factor + self.first_file[key].add_offset
             if key == 'time':
                 array = array + self.first_file["base_time"][:]
@@ -134,8 +135,8 @@ class Concat:
                 fill_value=fill_value,
             )
             var.set_auto_scale(False)
-            if key == 'sweep_mode': # sweep mode in kazr file has scond dimension ('string_length_22')
-                array = 'vertical pointing'
+            if key == 'sweep_mode': # KAZR: variable sweep mode has a second dimension ('string_length_22')
+                array = netCDF4.chartostring(self.first_file[key][0])
             var[:] = array
             _copy_attributes(self.first_file[key], var)
 
@@ -147,6 +148,9 @@ class Concat:
             for key in self.concatenated_file.variables.keys():
                 array = file[key][:]
                 if key in self.common_variables:
+                    if key in ["base_time","r_calib_radar_constant_copol","r_calib_radar_constant_crosspol","sweep_end_ray_index"]:
+                        # KAZR: not needed variables
+                        continue
                     if not np.array_equal(self.first_file[key][:], array):
                         raise InconsistentDataError(
                             f"Inconsistent values in variable '{key}' between "
@@ -154,6 +158,7 @@ class Concat:
                         )
                     continue
                 if 'scale_factor' in file[key].ncattrs():
+                    # KAZR: each file of one day has a different scale factor
                     array = array * file[key].scale_factor + file[key].add_offset
                 if key == 'time':
                     array = array + file["base_time"][:]
@@ -176,6 +181,7 @@ class Concat:
 def _copy_attributes(source: netCDF4.Dataset, target: netCDF4.Dataset) -> None:
     for attr in source.ncattrs():
         if attr == 'scale_factor' or attr == 'add_offset':
+            # KAZR: scale_factor and add_offset used to reduce file size, not needed after cloudnet processing
             continue
         if attr != "_FillValue":
             value = getattr(source, attr)
