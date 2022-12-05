@@ -707,4 +707,10 @@ ATTRIBUTES = {
     "corrected": PlotMeta(
         name="Corrected bit", cbar=_CBAR["bit"], plot_range=(0, 1), plot_type="bit"
     ),
+    "lls": PlotMeta(
+        name="Low-level stratus",
+        cbar="viridis",
+        plot_range=(0, 1),
+        plot_type="mesh",
+    ),
 }
