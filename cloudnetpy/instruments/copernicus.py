@@ -7,7 +7,6 @@ import numpy as np
 
 from cloudnetpy import concat_lib, output, utils
 from cloudnetpy.exceptions import ValidTimeStampError
-from cloudnetpy.instruments import general
 from cloudnetpy.instruments.instruments import COPERNICUS
 from cloudnetpy.instruments.nc_radar import NcRadar
 from cloudnetpy.metadata import MetaData
@@ -61,7 +60,7 @@ def copernicus2nc(
         if os.path.isdir(raw_files):
             nc_filename = f"{temp_dir}/tmp.nc"
             valid_filenames = utils.get_sorted_filenames(raw_files, ".nc")
-            valid_filenames = general.get_files_with_common_range(valid_filenames)
+            valid_filenames = utils.get_files_with_common_range(valid_filenames)
             variables = list(keymap.keys())
             concat_lib.concatenate_files(valid_filenames, nc_filename, variables=variables)
         else:
@@ -69,6 +68,7 @@ def copernicus2nc(
 
         with Copernicus(nc_filename, site_meta) as copernicus:
             copernicus.init_data(keymap)
+            copernicus.add_time_and_range()
             if date is not None:
                 copernicus.check_date(date)
             copernicus.sort_timestamps()
@@ -78,12 +78,12 @@ def copernicus2nc(
             copernicus.mask_corrupted_values()
             copernicus.mask_invalid_data()
             copernicus.add_time_and_range()
-            general.add_radar_specific_variables(copernicus)
+            copernicus.add_radar_specific_variables()
             copernicus.add_nyquist_velocity(keymap)
-            general.add_site_geolocation(copernicus)
+            copernicus.add_site_geolocation()
             valid_indices = copernicus.add_zenith_and_azimuth_angles()
-            general.screen_time_indices(copernicus, valid_indices)
-            general.add_height(copernicus)
+            copernicus.screen_time_indices(valid_indices)
+            copernicus.add_height()
         attributes = output.add_time_attribute(ATTRIBUTES, copernicus.date)
         output.update_attributes(copernicus.data, attributes)
         uuid = output.save_level1b(copernicus, output_file, uuid)

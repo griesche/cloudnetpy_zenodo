@@ -146,39 +146,8 @@ class PollyXt(Ceilometer):
                     depol_out_key = "depolarisation_%i_raw" %wavelength
                     self.data = utils.append_data(self.data, depol_out_key, nc_depol.variables[depol_key][:])
             self.data = utils.append_data(self.data, "time", time)
-            #### hannes
-            self.data = _mask_blowing_snow_events(self,time)
-            ####
             _close(nc_bsc, nc_depol)
         return epoch
-
-#### hannes 
-def _mask_blowing_snow_events(self,time):
-    file_blowing_snow = '/home/griesche/MOSAiC/blowing_snow.csv'
-    blowing_snow_events = []
-    with open(file_blowing_snow,newline='') as csvfile:
-        has_header = csv.Sniffer().has_header(csvfile.read(1024))
-        zero = csvfile.seek(0)
-        csvreader = csv.reader(csvfile,delimiter=';')
-        if has_header:
-            head = next(csvreader)
-        snow_events = [[_datetime_to_seconds(np.datetime64(row[0][6:10]+'-'+row[0][3:5]+'-'+row[0][:2]+'T'+row[0][11:16])),
-                        _datetime_to_seconds(np.datetime64(row[1][6:10]+'-'+row[1][3:5]+'-'+row[1][:2]+'T'+row[1][11:16]+'Z'))] 
-                       for row in csvreader]
-    for snow_event in snow_events:
-        if ((self.data['time'][0] < snow_event[1] and self.data['time'][-1] > snow_event[1]) or 
-            (self.data['time'][-1] > snow_event[0] and self.data['time'][-1] < snow_event[1])):
-            tidx_start_snow = np.argmin(abs(self.data['time']-snow_event[0]))
-            tidx_end_snow = np.argmin(abs(self.data['time']-snow_event[1]))
-            for key in self.data.keys():
-                if len(self.data[key].shape)<2:
-                    continue
-                if len(self.data[key].shape)==2:
-                    self.data[key][tidx_start_snow:tidx_end_snow,:] = np.ones((tidx_end_snow-tidx_start_snow,self.data[key].shape[1])) * np.nan 
-    return self.data
-
-def _datetime_to_seconds(datetime:np.datetime64):
-    return (datetime - np.datetime64('1970-01-01T00:00:00')) / np.timedelta64(1,'s')
 
 def _include_nr_data(self, input_folder: str) -> Epoch:
     bsc_files = glob.glob(f"{input_folder}/*[0-9]_att*.nc")
@@ -227,7 +196,6 @@ def _include_nr_data(self, input_folder: str) -> Epoch:
                 depol_out_key = "depolarisation_%i_raw" %wavelength
                 self.data = utils.append_data(self.data, depol_out_key, nc_depol.variables[depol_key][:])
         self.data = utils.append_data(self.data, "time", time)
-        self.data = _mask_blowing_snow_events(self,time)
         _close(nc_bsc, nc_bsc_nr, nc_depol)
     return epoch
 

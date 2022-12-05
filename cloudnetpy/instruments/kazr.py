@@ -12,7 +12,6 @@ from datetime import datetime,timedelta
 
 from cloudnetpy import concat_lib, output, utils
 from cloudnetpy.exceptions import ValidTimeStampError
-from cloudnetpy.instruments import general
 from cloudnetpy.instruments.instruments import KAZR
 from cloudnetpy.instruments.nc_radar import NcRadar
 from cloudnetpy.metadata import MetaData
@@ -75,7 +74,7 @@ def kazr2nc(
         temp_file = NamedTemporaryFile()  # pylint: disable=R1732
         nc_filename = temp_file.name
         valid_filenames = utils.get_sorted_filenames(raw_kazr, ".nc")
-        valid_filenames = general.get_files_with_common_range(valid_filenames)
+        valid_filenames = utils.get_files_with_common_range(valid_filenames)
         variables = list(keymap.keys())
         concat_lib.concatenate_files(valid_filenames, nc_filename, variables=variables)
         # gives error for kazr variable 'sweep_mode' (len(sweep_mode)=1 but dimensions(sweep,mode=(1,22))
@@ -85,24 +84,23 @@ def kazr2nc(
     kazr = Kazr(nc_filename, site_meta)
     kazr.init_data(keymap)
     if kazr.init_time[0] == '23':
-        kazr.time_offset = kazr._get_time_offset()
+        kazr.time_offset = kazr.get_time_offset()
         kazr.date = kazr._init_kazr_date()
     if date is not None:
         kazr.screen_by_date(date)
         kazr.date = date.split("-")
     kazr.sort_timestamps()
     kazr.remove_duplicate_timestamps()
-    #general.linear_to_db(kazr, ("Zh", "ldr", "SNR")) # is db already
     kazr.screen_by_snr()
     kazr.mask_invalid_data()
     kazr.add_time_and_range()
     kazr.remove_lowest_two_rangegates()
     kazr.calibrate_Z(calibration_offset)
-    general.add_site_geolocation(kazr)
-    general.add_radar_specific_variables(kazr)
+    kazr.add_site_geolocation()
+    kazr.add_radar_specific_variables()
     valid_indices = kazr.add_solar_angles()
-    general.screen_time_indices(kazr, valid_indices)
-    general.add_height(kazr)
+    kazr.screen_time_indices(valid_indices)
+    kazr.add_height()
     kazr.close()
     attributes = output.add_time_attribute(ATTRIBUTES, kazr.date)
     output.update_attributes(kazr.data, attributes)
@@ -137,7 +135,7 @@ class Kazr(NcRadar):
                 valid_indices.append(ind)
         if not valid_indices:
             raise ValidTimeStampError
-        general.screen_time_indices(self, valid_indices)
+        kazr.screen_time_indices(valid_indices)
 
     def sort_timestamps(self):
         """Sorts data by timestamps."""
@@ -218,7 +216,7 @@ class Kazr(NcRadar):
         time_stamps = self.getvar("time")+self.time_offset
         return utils.seconds2date(time_stamps[0], self.epoch)[3:]
 
-    def _get_time_offset(self):
+    def get_time_offset(self):
         time_stamps = self.getvar("time")
         dt_init_kazr = utils.seconds2date(time_stamps[0], self.epoch)
         timedelta_kazr = (datetime(int(dt_init_kazr[0]),int(dt_init_kazr[1]),int(dt_init_kazr[2]))+timedelta(days=1)) - datetime(int(dt_init_kazr[0]),int(dt_init_kazr[1]),int(dt_init_kazr[2]),int(dt_init_kazr[3]),int(dt_init_kazr[4]),int(dt_init_kazr[5]))

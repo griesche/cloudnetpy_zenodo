@@ -5,7 +5,8 @@ import numpy as np
 from numpy import ma
 
 from cloudnetpy import CloudnetArray, output, utils
-from cloudnetpy.exceptions import DisdrometerDataError
+from cloudnetpy.exceptions import DisdrometerDataError, ValidTimeStampError
+from cloudnetpy.instruments.cloudnet_instrument import CloudnetInstrument
 from cloudnetpy.instruments.vaisala import values_to_dict
 from cloudnetpy.metadata import MetaData
 
@@ -55,7 +56,8 @@ def disdrometer2nc(
         disdrometer.validate_date(date)
     disdrometer.init_data()
     if date is not None:
-        disdrometer.sort_time()
+        disdrometer.sort_timestamps()
+        disdrometer.remove_duplicate_timestamps()
     disdrometer.add_meta()
     disdrometer.convert_units()
     attributes = output.add_time_attribute(ATTRIBUTES, disdrometer.date)
@@ -63,8 +65,9 @@ def disdrometer2nc(
     return save_disdrometer(disdrometer, output_file, uuid)
 
 
-class Disdrometer:
+class Disdrometer(CloudnetInstrument):
     def __init__(self, filename: str, site_meta: dict, source: str):
+        super().__init__()
         self.filename = filename
         self.site_meta = site_meta
         self.source = source
@@ -72,7 +75,6 @@ class Disdrometer:
         self.sensor_id = None
         self.n_diameter: int = 0
         self.n_velocity: int = 0
-        self.data: dict = {}
         self._file_data = self._read_file()
 
     def convert_units(self):
@@ -104,7 +106,7 @@ class Disdrometer:
             if date == expected_date:
                 valid_ind.append(ind)
         if not valid_ind:
-            raise ValueError("No measurements from expected date")
+            raise ValidTimeStampError
         for key, value in self._file_data.items():
             if value:
                 self._file_data[key] = [self._file_data[key][ind] for ind in valid_ind]

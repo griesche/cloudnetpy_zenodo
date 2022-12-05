@@ -60,10 +60,12 @@ class Ceilometer:
         )
         for key in ("time", "range"):
             self.data[key] = np.array(self.data[key])
-        self.data["wavelength"] = float(self.instrument.wavelength)
-        for key in ("latitude", "longitude", "altitude"):
-            if key in self.site_meta:
-                self.data[key] = float(self.site_meta[key])
+        assert self.instrument is not None
+        assert self.instrument.wavelength is not None
+        self.data["wavelength"] = np.array([float(w) for w in self.instrument.wavelength])
+        key = "altitude"
+        if key in self.site_meta:
+            self.data[key] = float(self.site_meta[key])
 
     def get_date_and_time(self, epoch: Epoch) -> None:
         if self.expected_date is not None:
@@ -91,7 +93,6 @@ class Ceilometer:
     def add_snr_info(self, key: str, snr_limit: float):
         if key in self.data:
             self.data[key].comment += f" SNR threshold applied: {snr_limit}."
-
 
 class NoisyData:
     def __init__(self, data: dict, noise_param: NoiseParam, range_corrected: bool = True):
