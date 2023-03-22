@@ -55,6 +55,7 @@ def generate_ier(categorize_file: str, output_file: str, uuid: Optional[str] = N
         ice_classification = IceClassification(categorize_file)
         ier_source.append_main_variable_including_rain(ice_classification)
         ier_source.append_main_variable(ice_classification)
+        ier_source.convert_units()
         ier_source.append_status(ice_classification)
         ier_source.append_ier_error(ice_classification)
         date = ier_source.get_date()
@@ -67,6 +68,11 @@ def generate_ier(categorize_file: str, output_file: str, uuid: Optional[str] = N
 
 class IerSource(IceSource):
     """Data container for ice effective radius calculations."""
+
+    def convert_units(self):
+        """Convert um to m."""
+        for prod in ("ier", "ier_inc_rain"):
+            self.data[prod].data[:] /= 1e6
 
     def append_ier_error(self, ice_classification: IceClassification) -> None:
         error = ma.copy(self.data[f"{self.product}_inc_rain"][:])
@@ -139,17 +145,17 @@ DEFINITIONS = {
 IER_ATTRIBUTES = {
     "ier": MetaData(
         long_name="Ice effective radius",
-        units="m-6",
+        units="m",
         ancillary_variables="ier_error",
     ),
     "ier_inc_rain": MetaData(
         long_name="Ice effective radius including rain",
-        units="m-6",
+        units="m",
         comment=COMMENTS["ier_inc_rain"],
     ),
     "ier_error": MetaData(
         long_name="Random error in ice effective radius",
-        units="m-6",
+        units="m",
         comment=COMMENTS["ier_error"],
     ),
     "ier_retrieval_status": MetaData(
