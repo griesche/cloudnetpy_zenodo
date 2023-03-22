@@ -56,6 +56,7 @@ COPERNICUS = Instrument(
     frequency=34.960,
 )
 
+
 KAZR = Instrument(
     manufacturer="ARM", domain="radar", category="cloud radar", model="KAZR", frequency=35.6
 )

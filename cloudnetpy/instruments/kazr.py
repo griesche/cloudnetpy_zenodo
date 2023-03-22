@@ -56,7 +56,7 @@ def kazr2nc(
         "reflectivity": "Zh",
         "mean_doppler_velocity": "v",
         "spectral_width": "width",
-        #"linear_depolarization_ratio": "ldr",   # no real ldr saved in kazr files, linear correlation to Zh -> likely only crosstalk
+        #"linear_depolarisation_ratio": "ldr",   # no real ldr saved in kazr files, linear correlation to Zh -> likely only crosstalk
         "signal_to_noise_ratio_copolar_h": "SNR",
         "elevation": "elevation",
         "azimuth": "azimuth_angle",
