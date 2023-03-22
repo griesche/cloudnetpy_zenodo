@@ -9,6 +9,7 @@ from numpy import ma
 from numpy.testing import assert_array_equal
 import csv
 from datetime import datetime
+from scipy.interpolate import interp1d
 
 from cloudnetpy import output, utils
 from cloudnetpy.instruments import instruments
@@ -52,9 +53,12 @@ def pollyxt2nc(
 
     """
     snr_limit = site_meta.get("snr_limit", 2)
+    track_file = site_meta.get("track_file", "")
     polly = PollyXt(site_meta, date)
     epoch = polly.fetch_data(input_folder)
     polly.get_date_and_time(epoch)
+    if track_file != "":
+        polly.add_coordinate_array(track_file)
     polly.fetch_zenith_angle()
     polly.calc_screened_products(snr_limit)
     polly.mask_nan_values()
@@ -89,6 +93,8 @@ class PollyXt(Ceilometer):
             beta_nr_key = "beta_%i_nr" %wavelength
             if f"{beta_nr_key}_raw" in self.data.keys():
                 self.data[beta_nr_key] = ma.masked_where(self.data[snr_key_nr] < snr_limit, self.data[f"{beta_nr_key}_raw"])
+            if wavelength == 1064:
+                continue
             depol_key = "depolarisation_%i" %wavelength
             if f"{depol_key}_raw" in self.data.keys(): 
                 self.data[depol_key] = ma.masked_where(self.data[snr_key] < snr_limit, self.data[f"{depol_key}_raw"])
@@ -141,13 +147,30 @@ class PollyXt(Ceilometer):
                 if snr_key in nc_bsc.variables:
                     snr_out_key = "snr_%i" %wavelength
                     self.data = utils.append_data(self.data, snr_out_key, nc_bsc.variables[snr_key][:])
-                depol_key = "volume_depolarization_ratio_%inm" %wavelength
+                if wavelength == 1064:
+                    continue
+                depol_key = "volume_depolarisation_ratio_%inm" %wavelength
                 if depol_key in nc_depol.variables:
                     depol_out_key = "depolarisation_%i_raw" %wavelength
                     self.data = utils.append_data(self.data, depol_out_key, nc_depol.variables[depol_key][:])
             self.data = utils.append_data(self.data, "time", time)
             _close(nc_bsc, nc_depol)
         return epoch
+
+    def add_coordinate_array(self,track_file):
+        nc_track = netCDF4.Dataset(track_file,"r")
+        lat = nc_track['lat']
+        lon = nc_track['lon']
+        track_time = nc_track['time'][:]
+        if max(track_time)>25:
+            track_time = utils.seconds2hours(nc_track['time'])
+        lat_int_f = interp1d(track_time,lat,fill_value='extrapolate')
+        lon_int_f = interp1d(track_time,lon,fill_value='extrapolate')
+        latitude = lat_int_f(self.data["time"].data)
+        longitude = lon_int_f(self.data["time"].data)
+        self.data = utils.append_data(self.data, "latitude", latitude)
+        self.data = utils.append_data(self.data, "longitude", longitude)
+
 
 def _include_nr_data(self, input_folder: str) -> Epoch:
     bsc_files = glob.glob(f"{input_folder}/*[0-9]_att*.nc")
@@ -191,6 +214,8 @@ def _include_nr_data(self, input_folder: str) -> Epoch:
             if snr_key in nc_bsc_nr.variables:
                 snr_out_key = "snr_%i_nr" %wavelength
                 self.data = utils.append_data(self.data, snr_out_key, nc_bsc_nr.variables[snr_key][:])
+            if wavelength == 1064:
+                continue
             depol_key = "volume_depolarization_ratio_%inm" %wavelength
             if depol_key in nc_depol.variables:
                 depol_out_key = "depolarisation_%i_raw" %wavelength
@@ -221,7 +246,6 @@ def _read_array_from_file_triplet(
     assert_array_equal(array1, array2)
     assert_array_equal(array1, array3)
     return array1
-####
 
 def _read_array_from_multiple_files(files1: list, files2: list, key) -> np.ndarray:
     array: np.ndarray = np.array([])
@@ -259,10 +283,20 @@ ATTRIBUTES = {
         units="sr-1 m-1",
         comment="SNR-screened attenuated backscatter coefficient at 532 nm. SNR threshold applied: 2.",
     ),
+    "beta_532_nr": MetaData(
+        long_name="Attenuated backscatter coefficient (near range)",
+        units="sr-1 m-1",
+        comment="SNR-screened attenuated backscatter coefficient at 532 nm (near range). SNR threshold applied: 2.",
+    ),
     "beta_355": MetaData(
         long_name="Attenuated backscatter coefficient",
         units="sr-1 m-1",
         comment="SNR-screened attenuated backscatter coefficient at 355 nm. SNR threshold applied: 2.",
+    ),
+    "beta_355_nr": MetaData(
+        long_name="Attenuated backscatter coefficient (near range)",
+        units="sr-1 m-1",
+        comment="SNR-screened attenuated backscatter coefficient at 355 nm (near range). SNR threshold applied: 2.",
     ),
     "beta_1064_raw": MetaData(
         long_name="Attenuated backscatter coefficient",
@@ -274,15 +308,20 @@ ATTRIBUTES = {
         units="sr-1 m-1",
         comment="Non-screened attenuated backscatter coefficient at 532 nm.",
     ),
+    "beta_532_nr_raw": MetaData(
+        long_name="Attenuated backscatter coefficient (near range)",
+        units="sr-1 m-1",
+        comment="Non-screened attenuated backscatter coefficient at 532 nm (near range).",
+    ),
     "beta_355_raw": MetaData(
         long_name="Attenuated backscatter coefficient",
         units="sr-1 m-1",
         comment="Non-screened attenuated backscatter coefficient at 355 nm.",
     ),
-    "depolarisation_1064": MetaData(
-        long_name="Lidar volume linear depolarisation ratio",
-        units="1",
-        comment="SNR-screened lidar volume linear depolarisation ratio at 1064 nm.",
+    "beta_355_nr_raw": MetaData(
+        long_name="Attenuated backscatter coefficient (near range)",
+        units="sr-1 m-1",
+        comment="Non-screened attenuated backscatter coefficient at 355 nm (near range).",
     ),
     "depolarisation_532": MetaData(
         long_name="Lidar volume linear depolarisation ratio",
@@ -311,27 +350,27 @@ ATTRIBUTES = {
     ),
     "snr_1064": MetaData(
         long_name="Signal-to-Noise Ratio (1064 nm)",
-        units=" ",
+        units="1",
         comment="SNR of respective channel calculated according to Heese et al., 2010, ACP: \n Ceilometer lidar comparison: backscatter coefficient retrieval and signal-to-noise ratio determination.",
     ),
     "snr_532": MetaData(
         long_name="Signal-to-Noise Ratio (532 nm)",
-        units=" ",
+        units="1",
         comment="SNR of respective channel calculated according to Heese et al., 2010, ACP: \n Ceilometer lidar comparison: backscatter coefficient retrieval and signal-to-noise ratio determination.",
     ),
     "snr_355": MetaData(
         long_name="Signal-to-Noise Ratio (355 nm)",
-        units=" ",
+        units="1",
         comment="SNR of respective channel calculated according to Heese et al., 2010, ACP: \n Ceilometer lidar comparison: backscatter coefficient retrieval and signal-to-noise ratio determination.",
     ),
     "snr_532_nr": MetaData(
         long_name="Signal-to-Noise Ratio (532 nm near range)",
-        units=" ",
+        units="1",
         comment="SNR of respective channel calculated according to Heese et al., 2010, ACP: \n Ceilometer lidar comparison: backscatter coefficient retrieval and signal-to-noise ratio determination.",
     ),
     "snr_355_nr": MetaData(
         long_name="Signal-to-Noise Ratio (355 nm near range)",
-        units=" ",
+        units="1",
         comment="SNR of respective channel calculated according to Heese et al., 2010, ACP: \n Ceilometer lidar comparison: backscatter coefficient retrieval and signal-to-noise ratio determination.",
     ),
     "calibration_factor_1064": MetaData(
