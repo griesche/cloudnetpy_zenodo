@@ -28,13 +28,13 @@ class ClassData:
 
     Attributes:
         z (ndarray): 2D radar echo.
-        ldr (ndarray): 2D linear depolarization ratio.
+        ldr (ndarray): 2D linear depolarisation ratio.
         v (ndarray): 2D radar velocity.
         width (ndarray): 2D radar width.
         v_sigma (ndarray): 2D standard deviation of the velocity.
         tw (ndarray): 2D wet bulb temperature.
         beta (ndarray): 2D lidar backscatter.
-        lidar_depolarisation (ndarray): 2D lidar volume depolarization.
+        lidar_depolarisation (ndarray): 2D lidar volume depolarisation.
         lwp (ndarray): 1D liquid water path.
         time (ndarray): 1D fraction hour.
         height (ndarray): 1D height vector (m).
