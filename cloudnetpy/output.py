@@ -89,21 +89,20 @@ def get_references(identifier: Optional[str] = None) -> str:
         identifier: Cloudnet file type, e.g., 'iwc'.
 
     """
-    references = "https://doi.org/10.21105/joss.02123"
+    references = "https://doi.org/10.21105/joss.02123, https://doi.org/10.1175/BAMS-88-6-883"
     if identifier:
-        if identifier in ("lwc", "categorize"):
-            references += ", https://doi.org/10.1175/BAMS-88-6-883"
+        if identifier == "der":
+            references += ", https://doi.org/10.1175/1520-0426(2002)019<0835:TROSCD>2.0.CO;2"
         if identifier == "iwc":
             references += ", https://doi.org/10.1175/JAM2340.1"
-        if identifier == "drizzle":
-            references += ", https://doi.org/10.1175/JAM-2181.1"
-        if identifier == "der":
-            references += ", https://doi.org/10.1175/1520-0426(2002)019%3C0835:TROSCD%3E2.0.CO;2"
         if identifier == "ier":
             references += ", https://doi.org/10.5194/amt-13-5335-2020"
+        if identifier == "drizzle":
+            references += ", https://doi.org/10.1175/JAM-2181.1"
         if identifier == "lls":
             references += ", https://doi.org/10.5194/amt-13-5335-2020"
     return references
+
 
 def add_dependencies() -> str:
     """ Returns dependencies of the data set"""
@@ -167,6 +166,13 @@ def merge_history(nc: netCDF4.Dataset, file_type: str, data: dict) -> None:
 def add_source_instruments(nc: netCDF4.Dataset, data: dict) -> None:
     """Adds source attribute to categorize file."""
     sources = [obj.source for obj in data.values() if hasattr(obj, "source")]
+    for source_idx,source in enumerate(sources):
+        if source[:3] == "ARM":
+            sources[source_idx] = "ARM KAZR (https://doi.org/10.5439/1498936, https://doi.org/10.5439/1498948)"
+        elif source[:3] == "RPG":
+            sources[source_idx] = "RPG HATPRO G5 microwave radiometer (https://doi.org/10.1594/PANGAEA.941389)"
+        elif source[:21] == "Polarstern radiosonde":
+            sources[source_idx] = "Polarstern radiosonde data (https://doi.org/10.1594/PANGAEA.943870)"
     sources = [sources[0]] + [f"\n{source}" for source in sources[1:]]
     nc.source = "".join(sources)
 
@@ -254,7 +260,7 @@ def add_source_attribute(attributes: dict, data: dict):
             "nyquist_velocity",
             "rain_rate",
         ),
-        "lidar": ("beta", "lidar_depolarization", "lidar_wavelength"),
+        "lidar": ("beta", "lidar_depolarisation", "lidar_wavelength"),
         "mwr": ("lwp",),
         "model": ("uwind", "vwind", "Tw", "q", "pressure", "temperature"),
     }
