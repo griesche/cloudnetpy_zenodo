@@ -338,10 +338,10 @@ CATEGORIZE_ATTRIBUTES = {
         long_name="Bias in attenuated backscatter coefficient",
         units="dB",
     ),
-    "lidar_depolarization": MetaData(
-        long_name="Calibrated volume depolarization (532 nm)",
+    "lidar_depolarisation": MetaData(
+        long_name="Calibrated volume depolarisation (532 nm)",
         units="1",
-        comment="SNR-screened calibrated volume depolarization 532 nm",
+        comment="SNR-screened calibrated volume depolarisation 532 nm",
     ),
     "lidar_wavelength": MetaData(long_name="Laser wavelength", units="nm"),
     # MWR variables
