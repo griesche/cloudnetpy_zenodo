@@ -18,7 +18,7 @@ def find_insects(
     Insects are classified by estimating heuristic probability
     of insects from various individual radar parameters and combining
     these probabilities. Insects typically yield small echo and spectral width
-    but high linear depolarization ratio (ldr), and they are present in warm
+    but high linear depolarisation ratio (ldr), and they are present in warm
     temperatures.
 
     The combination of echo, ldr and temperature is generally the best proxy
