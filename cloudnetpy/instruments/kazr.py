@@ -4,11 +4,13 @@ import os
 from tempfile import NamedTemporaryFile
 from typing import List, Optional
 import glob
+import netCDF4
 
 import numpy as np
 from numpy import ma
 
 from datetime import datetime,timedelta
+from scipy.interpolate import interp1d
 
 from cloudnetpy import concat_lib, output, utils
 from cloudnetpy.exceptions import ValidTimeStampError
@@ -68,7 +70,8 @@ def kazr2nc(
         "nyquist_velocity": "nyquist_velocity",
     }
 
-    calibration_offset = 1 # kazr_ge = 1 , kazr_md = 6
+    calibration_offset = site_meta.get("calibration_offset", 0) # kazr_ge = 1 , kazr_md = 6
+    track_file = site_meta.get("track_file", "")
 
     if os.path.isdir(raw_kazr):
         temp_file = NamedTemporaryFile()  # pylint: disable=R1732
@@ -97,6 +100,8 @@ def kazr2nc(
     kazr.remove_lowest_two_rangegates()
     kazr.calibrate_Z(calibration_offset)
     kazr.add_site_geolocation()
+    if track_file != "":
+        kazr.add_coordinate_array(track_file)
     kazr.add_radar_specific_variables()
     valid_indices = kazr.add_solar_angles()
     kazr.screen_time_indices(valid_indices)
@@ -222,6 +227,20 @@ class Kazr(NcRadar):
         timedelta_kazr = (datetime(int(dt_init_kazr[0]),int(dt_init_kazr[1]),int(dt_init_kazr[2]))+timedelta(days=1)) - datetime(int(dt_init_kazr[0]),int(dt_init_kazr[1]),int(dt_init_kazr[2]),int(dt_init_kazr[3]),int(dt_init_kazr[4]),int(dt_init_kazr[5]))
         time_offset = timedelta_kazr.seconds
         return time_offset
+
+    def add_coordinate_array(self,track_file):
+        nc_track = netCDF4.Dataset(track_file,"r")
+        lat = nc_track['lat']
+        lon = nc_track['lon']
+        track_time = nc_track['time'][:]
+        if max(track_time)>25:
+            track_time = utils.seconds2hours(nc_track['time'])
+        lat_int_f = interp1d(track_time,lat,fill_value='extrapolate')
+        lon_int_f = interp1d(track_time,lon,fill_value='extrapolate')
+        latitude = lat_int_f(self.data["time"].data)
+        longitude = lon_int_f(self.data["time"].data)
+        self.data["latitude"].data = latitude
+        self.data["longitude"].data = longitude
 
 
 ATTRIBUTES = {
