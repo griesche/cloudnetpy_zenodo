@@ -150,7 +150,7 @@ def generate_categorize(input_files: dict, output_file: str, uuid: Optional[str]
                 }
         data_a3k = {
             "radar": Radar(input_files["radar_a3k"]),
-            "lidar": Lidar(input_files["lidar_a3k"], "beta_532"),
+            "lidar": Lidar(input_files["lidar"], "beta_532"),
         }
         data["radar"],data["lidar"] = _merge_b3k_a3k()
         assert data["radar"].altitude is not None
